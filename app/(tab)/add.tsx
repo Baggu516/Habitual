@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Plus,
@@ -25,8 +27,9 @@ import { DAY_OPTIONS, FREE_HABIT_LIMIT, FREE_DAYS_LIMIT } from '@/types/habit';
 
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
-  const { habits, days, updateDays, addHabit, deleteHabit, archiveAndStartNew, stats, isLoading, isFree } = useHabits();
+  const { habits, days, updateDays, addHabit, deleteHabit, archiveAndStartNew, stats, isLoading, isFree, trackingStartDate, setTrackingStartDate } = useHabits();
   const [newHabit, setNewHabit] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const handleAddHabit = useCallback(() => {
     if (!newHabit.trim()) return;
@@ -77,11 +80,11 @@ export default function AddScreen() {
     }
     Alert.alert(
       'Complete & Start New',
-      `This will archive your current session (${stats.completionPercent}% done) and reset all checkboxes. Your habits will remain. You can view archived sessions in the History tab.`,
+      `Save this session (${stats.completionPercent}% done) to History and clear all habits?\n\nYou can create new habits after. View archived sessions in the History tab.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Archive & Reset',
+          text: 'Complete & Archive',
           onPress: () => {
             archiveAndStartNew();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -149,6 +152,46 @@ export default function AddScreen() {
               );
             })}
           </View>
+        </View>
+
+        <View style={[styles.section]}>
+          <View style={styles.sectionHeader}>
+            <Calendar size={16} color={Colors.primary} />
+            <Text style={styles.sectionTitle}>Period start</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.startDateRow}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowDatePicker(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.startDateLabel}>
+              {trackingStartDate
+                ? new Date(trackingStartDate + 'T12:00:00').toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : 'Tap to pick date'}
+            </Text>
+            <Text style={styles.startDateHint}>First day of tracking</Text>
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={new Date((trackingStartDate || new Date().toISOString().slice(0, 10)) + 'T12:00:00')}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_, date: Date | undefined) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (date) {
+                  setTrackingStartDate(date.toISOString().slice(0, 10));
+                }
+              }}
+            />
+          )}
         </View>
 
         <View style={styles.section}>
@@ -322,6 +365,26 @@ const styles = StyleSheet.create({
   daysRow: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
+  },
+  startDateRow: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  startDateLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  startDateHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
   },
   dayPill: {
     flex: 1,

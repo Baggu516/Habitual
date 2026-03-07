@@ -60,10 +60,21 @@ export default function RegisterScreen() {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['rgba(34,211,167,0.10)', 'rgba(255,107,53,0.06)', Colors.background]}
+        colors={[
+          Colors.secondaryGlow,
+          Colors.primaryGlow,
+          'rgba(245, 245, 245, 0.95)',
+          Colors.background,
+        ]}
         style={styles.gradient}
-        start={{ x: 0.8, y: 0 }}
-        end={{ x: 0.2, y: 0.6 }}
+        start={{ x: 1, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
+      <LinearGradient
+        colors={['rgba(94, 234, 212, 0.08)', 'transparent', 'rgba(20, 184, 166, 0.06)']}
+        style={styles.gradientOverlay}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
       />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -188,7 +199,14 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 400,
+    bottom: 0,
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   scrollContent: {
     flexGrow: 1,

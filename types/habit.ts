@@ -48,3 +48,8 @@ export const FREE_HABIT_LIMIT = 5;
 export const FREE_DAYS_LIMIT = 7;
 export const DEFAULT_DAYS = 7;
 export const DAY_OPTIONS = [7, 14, 21, 30] as const;
+
+export interface HabitConfig {
+  days: number;
+  trackingStartDate?: string; // YYYY-MM-DD; if missing, last column = today
+}

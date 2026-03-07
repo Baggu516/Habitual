@@ -8,12 +8,14 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { UserPen, LogOut, CreditCard } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/providers/AuthProvider';
 
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const PROFILE_PROGRESS = 12.5;
 
 export default function MoreScreen() {
@@ -111,7 +113,7 @@ export default function MoreScreen() {
           <LogOut size={18} color={Colors.danger} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-        <Text style={styles.versionText}>v1.0.0</Text>
+        <Text style={styles.versionText}>v{APP_VERSION}</Text>
       </View>
     </View>
   );

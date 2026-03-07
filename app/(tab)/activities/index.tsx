@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Pressable,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, Target, MoreVertical, Columns3 } from 'lucide-react-native';
@@ -22,7 +22,7 @@ const LABEL_WIDTH = 110;
 
 export default function ActivitiesScreen() {
   const insets = useSafeAreaInsets();
-  const { habits, days, completions, toggleCell, stats, archiveAndStartNew, isLoading, gridLayout, setGridLayout } = useHabits();
+  const { habits, days, completions, toggleCell, stats, archiveAndStartNew, resetCompletionsOnly, isLoading, gridLayout, setGridLayout, getDateForDayIndex, isPastDate } = useHabits();
 
   const handleToggle = useCallback(
     (habitId: string, dayIndex: number) => {
@@ -39,7 +39,7 @@ export default function ActivitiesScreen() {
     }
     Alert.alert(
       'Complete Session',
-      `Archive this session (${stats.completionPercent}% done) and reset all checkboxes?\n\nYour habits will remain. View archived sessions in History.`,
+      `Save this session (${stats.completionPercent}% done) to History and clear all habits?\n\nYou can create new habits after. View archived sessions in the History tab.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -71,19 +71,19 @@ export default function ActivitiesScreen() {
           text: 'Reset',
           style: 'destructive',
           onPress: () => {
-            archiveAndStartNew();
+            resetCompletionsOnly();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           },
         },
       ]
     );
-  }, [habits.length, completions, archiveAndStartNew]);
+  }, [habits.length, completions, resetCompletionsOnly]);
 
   const openFABMenu = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
       'Session actions',
-      undefined,
+      'Choose an action!!',
       [
         { text: 'Complete & Archive', onPress: handleComplete },
         { text: 'Start Fresh', onPress: handleStartFresh },
@@ -121,8 +121,19 @@ export default function ActivitiesScreen() {
     );
   }
 
-  const dayNumbers = Array.from({ length: days }, (_, i) => i + 1);
+  const dayNumbers = Array.from({ length: days }, (_, i) => i);
   const allComplete = stats.completionPercent === 100;
+
+  const formatDayLabel = (dayIndex: number) => {
+    const dateStr = getDateForDayIndex(dayIndex);
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isToday = (dayIndex: number) => getDateForDayIndex(dayIndex) === todayStr;
 
   return (
     <View style={styles.container}>
@@ -174,22 +185,36 @@ export default function ActivitiesScreen() {
             >
               <View>
                 <View style={styles.dayHeaderRow}>
-                  {dayNumbers.map((d) => (
-                    <View key={d} style={[styles.dayHeaderCell, styles.dayHeaderCellColored]}>
-                      <Text style={styles.dayHeaderTextColored}>D{d}</Text>
+                  {dayNumbers.map((di) => (
+                    <View key={di} style={[styles.dayHeaderCell, styles.dayHeaderCellColored]}>
+                      <Text style={styles.dayHeaderTextColored} numberOfLines={1}>
+                        {formatDayLabel(di)}
+                      </Text>
                     </View>
                   ))}
                 </View>
                 {habits.map((h) => (
                   <View key={h.id} style={styles.habitRow}>
-                    {dayNumbers.map((_, di) => {
+                    {dayNumbers.map((di) => {
                       const done = completions[h.id]?.[di] ?? false;
+                      const past = isPastDate(di);
+                      const isTodayColumn = isToday(di);
+                      const disabled = past || (done && !isTodayColumn);
                       return (
                         <TouchableOpacity
                           key={di}
-                          style={[styles.cell, done ? styles.cellDone : styles.cellEmpty]}
-                          onPress={() => handleToggle(h.id, di)}
+                          style={[
+                            styles.cell,
+                            done
+                              ? isTodayColumn
+                                ? styles.cellDoneToday
+                                : styles.cellDone
+                              : styles.cellEmpty,
+                            past && !done && styles.cellPastDay,
+                          ]}
+                          onPress={() => !disabled && handleToggle(h.id, di)}
                           activeOpacity={0.7}
+                          disabled={disabled}
                           testID={`cell-${h.id}-${di}`}
                         >
                           {done && <Check size={18} color={Colors.white} strokeWidth={3} />}
@@ -208,9 +233,11 @@ export default function ActivitiesScreen() {
               <View style={[styles.cornerCell, styles.cornerCellDays, { height: CELL_SIZE }]}>
                 <Text style={styles.cornerTextDays}>Days</Text>
               </View>
-              {dayNumbers.map((d) => (
-                <View key={d} style={[styles.labelCell, { height: CELL_SIZE }]}>
-                  <Text style={styles.labelTextDays}>D{d}</Text>
+              {dayNumbers.map((di) => (
+                <View key={di} style={[styles.labelCell, { height: CELL_SIZE }]}>
+                  <Text style={styles.labelTextDays} numberOfLines={1}>
+                    {formatDayLabel(di)}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -230,16 +257,28 @@ export default function ActivitiesScreen() {
                     </View>
                   ))}
                 </View>
-                {dayNumbers.map((_, di) => (
+                {dayNumbers.map((di) => (
                   <View key={di} style={styles.habitRow}>
                     {habits.map((h) => {
                       const done = completions[h.id]?.[di] ?? false;
+                      const past = isPastDate(di);
+                      const isTodayColumn = isToday(di);
+                      const disabled = past || (done && !isTodayColumn);
                       return (
                         <TouchableOpacity
                           key={h.id}
-                          style={[styles.cell, done ? styles.cellDone : styles.cellEmpty]}
-                          onPress={() => handleToggle(h.id, di)}
+                          style={[
+                            styles.cell,
+                            done
+                              ? isTodayColumn
+                                ? styles.cellDoneToday
+                                : styles.cellDone
+                              : styles.cellEmpty,
+                            past && !done && styles.cellPastDay,
+                          ]}
+                          onPress={() => !disabled && handleToggle(h.id, di)}
                           activeOpacity={0.7}
+                          disabled={disabled}
                           testID={`cell-${h.id}-${di}`}
                         >
                           {done && <Check size={18} color={Colors.white} strokeWidth={3} />}
@@ -500,11 +539,19 @@ const styles = StyleSheet.create({
     marginRight: CELL_GAP,
   },
   cellDone: {
+    backgroundColor: Colors.completedCell,
+  },
+  /** Today's cell when checked – teal to show it's current */
+  cellDoneToday: {
     backgroundColor: Colors.secondary,
   },
   cellEmpty: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.emptyCell,
     borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cellPastDay: {
+    backgroundColor: Colors.emptyCellPastDay,
     borderColor: Colors.border,
   },
   fab: {

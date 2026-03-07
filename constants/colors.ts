@@ -28,6 +28,15 @@ export const Colors = {
   textSecondary: '#6B7280',
   textMuted: '#9CA3AF',
 
+  /** Gray shade for completed day cells in Activities grid */
+  completedCell: '#9CA3B8',
+
+  /** Gray shade for empty/pending day cells in Activities grid */
+  emptyCell: '#E8EAED',
+
+  /** Gray shade for unselected cells on past days only */
+  emptyCellPastDay: '#D1D5DB',
+
   white: '#FFFFFF',
   black: '#000000',
   transparent: 'transparent',

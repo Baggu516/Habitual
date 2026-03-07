@@ -21,7 +21,19 @@ import ProgressBar from '@/components/ProgressBar';
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { stats, habits, days, isLoading } = useHabits();
+  const { stats, habits, days, completions, isLoading, getDateForDayIndex } = useHabits();
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dayIndices = Array.from({ length: days }, (_, i) => i);
+  const completedDays =
+    habits.length === 0
+      ? 0
+      : dayIndices.filter((di) =>
+          habits.every((h) => completions[h.id]?.[di] === true)
+        ).length;
+  const remainingDaysLeft = dayIndices.filter(
+    (di) => getDateForDayIndex(di) >= todayStr
+  ).length;
 
   const openMore = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -35,11 +47,31 @@ export default function DashboardScreen() {
     return 'Good evening';
   };
 
-  const dateStr = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
+  const getOrdinalSuffix = (n: number) => {
+    const v = n % 100;
+    if (v >= 11 && v <= 13) return 'th';
+    switch (v % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
+
+  // Unicode superscript for ordinal: ˢᵗ ⁿᵈ ʳᵈ ᵗʰ
+  const getSuperscriptOrdinal = (n: number) => {
+    const suffix = getOrdinalSuffix(n);
+    const superscriptMap: Record<string, string> = {
+      st: 'ˢᵗ', nd: 'ⁿᵈ', rd: 'ʳᵈ', th: 'ᵗʰ',
+    };
+    return n + superscriptMap[suffix];
+  };
+
+  const now = new Date();
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const dayNum = now.getDate();
+  const month = now.toLocaleDateString('en-US', { month: 'long' });
+  const dayWithSuperscript = getSuperscriptOrdinal(dayNum);
 
   if (isLoading) {
     return (
@@ -65,7 +97,9 @@ export default function DashboardScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             Hey👋, {user?.name?.split(' ')[0] ?? 'there'}
           </Text>
-          <Text style={styles.headerDate}>{dateStr}</Text>
+          <Text style={styles.headerDate}>
+            {weekday}, <Text style={styles.headerDateDay}>{dayWithSuperscript}</Text> {month}
+          </Text>
         </View>
         <View style={styles.headerSpacer} />
       </View>
@@ -116,7 +150,7 @@ export default function DashboardScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statsRow}>
                 <StatCard
-                  label="Total"
+                  label="Total habits"
                   value={stats.totalHabits}
                   color={Colors.primary}
                   icon={<Layers size={16} color={Colors.primary} />}
@@ -124,8 +158,8 @@ export default function DashboardScreen() {
                 />
                 <View style={styles.statGap} />
                 <StatCard
-                  label="Done"
-                  value={stats.completedCells}
+                  label="Completed"
+                  value={completedDays}
                   color={Colors.secondary}
                   icon={<CheckCircle size={16} color={Colors.secondary} />}
                   delay={200}
@@ -133,8 +167,8 @@ export default function DashboardScreen() {
               </View>
               <View style={styles.statsRow}>
                 <StatCard
-                  label="Remaining"
-                  value={stats.remainingCells}
+                  label="Days left"
+                  value={remainingDaysLeft}
                   color={Colors.accent}
                   icon={<Clock size={16} color={Colors.accent} />}
                   delay={300}
@@ -205,8 +239,13 @@ const styles = StyleSheet.create({
   },
   headerDate: {
     fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.85)',
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
+  },
+  headerDateDay: {
+    color: Colors.accent,
+    fontWeight: '600' as const,
+    fontSize: 12,
   },
   headerSpacer: {
     width: 40,

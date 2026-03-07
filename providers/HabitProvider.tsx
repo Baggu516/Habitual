@@ -11,9 +11,51 @@ import {
   DEFAULT_DAYS,
   FREE_HABIT_LIMIT,
   FREE_DAYS_LIMIT,
+  HabitConfig,
 } from '@/types/habit';
 
 export type GridLayout = 'habits-rows' | 'days-rows';
+
+function toYYYYMMDD(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function getDefaultStartDate(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - (days - 1));
+  return toYYYYMMDD(d);
+}
+
+function addDays(dateStr: string, daysToAdd: number): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + daysToAdd);
+  return toYYYYMMDD(d);
+}
+
+function getDateForDayIndex(startDate: string, dayIndex: number): string {
+  return addDays(startDate, dayIndex);
+}
+
+function isPastDate(startDate: string, dayIndex: number): boolean {
+  const today = toYYYYMMDD(new Date());
+  const cellDate = getDateForDayIndex(startDate, dayIndex);
+  return cellDate < today;
+}
+
+function parseConfig(raw: string | null): HabitConfig {
+  if (!raw) return { days: DEFAULT_DAYS };
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'number') return { days: parsed };
+    return {
+      days: typeof parsed.days === 'number' ? parsed.days : DEFAULT_DAYS,
+      trackingStartDate:
+        typeof parsed.trackingStartDate === 'string' ? parsed.trackingStartDate : undefined,
+    };
+  } catch {
+    return { days: DEFAULT_DAYS };
+  }
+}
 
 function storageKeys(userId: string) {
   return {
@@ -55,6 +97,7 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
   const { user } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [days, setDays] = useState<number>(DEFAULT_DAYS);
+  const [trackingStartDate, setTrackingStartDateState] = useState<string | undefined>(undefined);
   const [completions, setCompletions] = useState<CompletionData>({});
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [gridLayout, setGridLayoutState] = useState<GridLayout>('habits-rows');
@@ -65,7 +108,7 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     queryKey: ['habitData', user?.id],
     queryFn: async () => {
       if (!keys) return null;
-      const [hRaw, cRaw, dRaw, histRaw, layoutRaw] = await Promise.all([
+      const [hRaw, cRaw, configRaw, histRaw, layoutRaw] = await Promise.all([
         AsyncStorage.getItem(keys.habits),
         AsyncStorage.getItem(keys.completions),
         AsyncStorage.getItem(keys.config),
@@ -73,9 +116,11 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
         AsyncStorage.getItem(keys.gridLayout),
       ]);
       const layout: GridLayout = layoutRaw === 'days-rows' ? 'days-rows' : 'habits-rows';
+      const config = parseConfig(configRaw);
       return {
         habits: hRaw ? (JSON.parse(hRaw) as Habit[]) : [],
-        days: dRaw ? (JSON.parse(dRaw) as number) : DEFAULT_DAYS,
+        days: config.days,
+        trackingStartDate: config.trackingStartDate,
         completions: cRaw ? (JSON.parse(cRaw) as CompletionData) : {},
         history: histRaw ? (JSON.parse(histRaw) as HistoryEntry[]) : [],
         gridLayout: layout,
@@ -89,6 +134,7 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     if (dataQuery.data) {
       setHabits(dataQuery.data.habits);
       setDays(dataQuery.data.days);
+      setTrackingStartDateState(dataQuery.data.trackingStartDate);
       setCompletions(dataQuery.data.completions);
       setHistory(dataQuery.data.history);
       setGridLayoutState(dataQuery.data.gridLayout ?? 'habits-rows');
@@ -99,11 +145,38 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     if (!user) {
       setHabits([]);
       setDays(DEFAULT_DAYS);
+      setTrackingStartDateState(undefined);
       setCompletions({});
       setHistory([]);
       setGridLayoutState('habits-rows');
     }
   }, [user]);
+
+  const resolvedStartDate = useMemo(
+    () => trackingStartDate ?? getDefaultStartDate(days),
+    [trackingStartDate, days]
+  );
+
+  const getDateForDayIndexExport = useCallback(
+    (dayIndex: number) => getDateForDayIndex(resolvedStartDate, dayIndex),
+    [resolvedStartDate]
+  );
+
+  const isPastDateExport = useCallback(
+    (dayIndex: number) => isPastDate(resolvedStartDate, dayIndex),
+    [resolvedStartDate]
+  );
+
+  const setTrackingStartDate = useCallback(
+    (dateStr: string) => {
+      setTrackingStartDateState(dateStr);
+      if (keys) {
+        const config: HabitConfig = { days, trackingStartDate: dateStr };
+        AsyncStorage.setItem(keys.config, JSON.stringify(config));
+      }
+    },
+    [days, keys]
+  );
 
   const setGridLayout = useCallback(
     (layout: GridLayout) => {
@@ -114,15 +187,19 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
   );
 
   const persist = useCallback(
-    async (h: Habit[], d: number, c: CompletionData) => {
+    async (h: Habit[], d: number, c: CompletionData, startDate?: string) => {
       if (!keys) return;
+      const config: HabitConfig = {
+        days: d,
+        trackingStartDate: startDate ?? trackingStartDate ?? undefined,
+      };
       await Promise.all([
         AsyncStorage.setItem(keys.habits, JSON.stringify(h)),
-        AsyncStorage.setItem(keys.config, JSON.stringify(d)),
+        AsyncStorage.setItem(keys.config, JSON.stringify(config)),
         AsyncStorage.setItem(keys.completions, JSON.stringify(c)),
       ]);
     },
-    [keys]
+    [keys, trackingStartDate]
   );
 
   const persistHistory = useCallback(
@@ -203,9 +280,11 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
           nc[hid] = old.slice(0, newDays);
         }
       }
+      const newStartDate = getDefaultStartDate(newDays);
       setDays(newDays);
+      setTrackingStartDateState(newStartDate);
       setCompletions(nc);
-      persist(habits, newDays, nc);
+      persist(habits, newDays, nc, newStartDate);
     },
     [completions, habits, user, persist]
   );
@@ -233,10 +312,22 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     setHistory(newHistory);
     persistHistory(newHistory);
 
+    // Clear habits and completions so user can create new ones.
     setHabits([]);
     setCompletions({});
     persist([], days, {});
   }, [habits, days, completions, history, persist, persistHistory]);
+
+  /** Reset all checkboxes without archiving. Keeps habits and period. */
+  const resetCompletionsOnly = useCallback(() => {
+    if (habits.length === 0) return;
+    const nc: CompletionData = {};
+    habits.forEach((h) => {
+      nc[h.id] = new Array(days).fill(false) as boolean[];
+    });
+    setCompletions(nc);
+    persist(habits, days, nc);
+  }, [habits, days, persist]);
 
   const deleteHistoryEntry = useCallback(
     (id: string) => {
@@ -260,6 +351,10 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     history,
     gridLayout,
     setGridLayout,
+    trackingStartDate: resolvedStartDate,
+    getDateForDayIndex: getDateForDayIndexExport,
+    isPastDate: isPastDateExport,
+    setTrackingStartDate,
     isLoading: dataQuery.isLoading && !!user,
     addHabit,
     editHabit,
@@ -267,6 +362,7 @@ export const [HabitProvider, useHabits] = createContextHook(() => {
     toggleCell,
     updateDays,
     archiveAndStartNew,
+    resetCompletionsOnly,
     deleteHistoryEntry,
     isFree: user?.subscriptionType === 'free',
   };
